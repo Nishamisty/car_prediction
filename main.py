@@ -4,6 +4,7 @@ import pandas as pd
 import pickle
 import base64
 import re
+from sklearn.preprocessing import OneHotEncoder
 
 # ✅ Load Model
 with open("car_price_model.pkl", "rb") as file:
@@ -15,6 +16,17 @@ cr = pd.read_csv('car_dheko_filled.csv')
 # Clean and preprocess dataset
 cr['Kms_Driven'] = cr['Kms_Driven'].fillna(0).astype(str).str.replace(',', '').astype(int)
 cr['Max Power'] = cr['Max Power'].str.extract(r'(\d+\.?\d*)').astype(float)
+
+# Get all expected features from model (if available)
+if hasattr(car_model, 'feature_names_in_'):
+    expected_features = list(car_model.feature_names_in_)
+else:
+    # Fallback to our known features if model doesn't have feature_names_in_
+    expected_features = [
+        'city', 'Body Type', 'Kms_Driven', 'oem', 'model', 'modelYear',
+        'Fuel Type', 'Ownership', 'Transmission', 'Mileage', 'Engine Type',
+        'Max Power', 'Acceleration'
+    ]
 
 # ✅ Function to Convert Local Image to Base64
 def get_base64_image(image_path):
@@ -69,13 +81,11 @@ st.title("🚗 Car Price Prediction Dashboard")
 
 # ✅ Sidebar Navigation
 st.sidebar.title("🔍 Navigation")
-page = st.sidebar.radio("Go to", ["🏠 Home", "📊 Predict Price", "ℹ️ Car Details"])
+page = st.sidebar.radio("Go to", ["🏠 Home", "📊 Predict Price", "Data Explorer"])
 
 # 🚗 HOME PAGE
-# --------------------------------
 if page == "🏠 Home":
     st.header("Welcome to the Car Price Prediction App! 🏁")
-
     st.write("""
     Get **AI-powered price estimates** for your car in just a few clicks!  
     Whether you're **buying, selling, or comparing**, we've got you covered.
@@ -86,8 +96,6 @@ if page == "🏠 Home":
     """)
 
     st.markdown("---")
-    
-    # 🚀 How it Works
     st.subheader("🚀 How Does It Work?")
     st.write("""
     1️⃣ Enter your car’s **details** (Brand, Model, Year, Mileage, etc.)  
@@ -96,8 +104,6 @@ if page == "🏠 Home":
     """)
 
     st.markdown("---")
-    
-    # 🌟 Why Use This App?
     st.subheader("🌟 Why Use This App?")
     st.write("""
     ✅ **Accurate Predictions** – Powered by Machine Learning  
@@ -106,16 +112,9 @@ if page == "🏠 Home":
     """)
 
     st.markdown("---")
-
     st.subheader("📊 Ready to Get Started?")
     st.write("Head over to the **Prediction Page** and try it out now!")
 
-# --------------------------------
- # Define the required features
-    feature_columns = [
-    'city', 'Body Type', 'Kms_Driven', 'oem', 'model', 'modelYear',
-    'Fuel Type', 'Ownership', 'Transmission', 'Mileage', 'Engine Type',
-    'Max Power', 'Acceleration']
 # 📊 PREDICTION PAGE
 elif page == "📊 Predict Price":
     st.header("📊 Predict Car Price")
@@ -124,70 +123,132 @@ elif page == "📊 Predict Price":
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        city = st.selectbox("Select City:", options=cr['city'].unique())
-        oem = st.selectbox("Select OEM (Manufacturer):", options=cr['oem'].unique())
+        city = st.selectbox("Select City:", options=sorted(cr['city'].unique()))
+        oem = st.selectbox("Select OEM (Manufacturer):", options=sorted(cr['oem'].unique()))
         
         # Filter models based on selected OEM
         filtered_data = cr[cr['oem'] == oem]
-        model_name = st.selectbox("Select Car Model:", options=filtered_data['model'].unique())
+        model_name = st.selectbox("Select Car Model:", options=sorted(filtered_data['model'].unique()))
         
-        # Ensure the year is within a reasonable range
-        year = st.selectbox("Select the Year:", options=sorted(filtered_data['modelYear'].unique()), index=0)
+        year = st.selectbox("Select the Year:", 
+                          options=sorted(filtered_data['modelYear'].unique()),
+                          index=len(filtered_data['modelYear'].unique())-1)
         
-        # Default value for kilometers driven
-        kms_driven = st.number_input("Kilometers Driven", min_value=0, value=10000)
+        kms_driven = st.number_input("Kilometers Driven", min_value=0, value=50000)
 
     with col2:
-        Mileage = st.selectbox("Select Mileage (in km/l):", options=sorted(filtered_data['Mileage'].unique()))
-        fuel_type = st.selectbox("Select Fuel Type:", options=filtered_data['Fuel Type'].unique())
-        transmission = st.selectbox("Select Transmission Type:", options=filtered_data['Transmission'].unique())
-        engine_type = st.selectbox("Select Engine Type:", options=sorted(filtered_data['Engine Type'].unique()))
+        mileage = st.number_input("Mileage (km/l)", 
+                                min_value=5.0, 
+                                max_value=30.0, 
+                                value=15.0, 
+                                step=0.1)
+        fuel_type = st.selectbox("Select Fuel Type:", 
+                               options=sorted(filtered_data['Fuel Type'].unique()))
+        transmission = st.selectbox("Select Transmission Type:", 
+                                  options=sorted(filtered_data['Transmission'].unique()))
+        engine_type = st.selectbox("Select Engine Type:", 
+                                 options=sorted(filtered_data['Engine Type'].unique()))
 
     with col3:
-        ownership = st.selectbox("Select Ownership Type:", options=filtered_data['Ownership'].unique())
-        max_power = st.selectbox("Select Max Power (in BHP):", options=sorted(filtered_data['Max Power'].unique()))
-        Acceleration = st.selectbox("Select Acceleration Type:", options=sorted(filtered_data['Acceleration'].unique()))
-        body_type = st.selectbox("Select Body Type:", options=sorted(cr['Body Type'].unique()))  # Add body type selection
-        # Prediction Page
-    # Prediction Page
+        ownership = st.selectbox("Select Ownership Type:", 
+                              options=sorted(filtered_data['Ownership'].unique()))
+        max_power = st.number_input("Max Power (BHP)", 
+                                  min_value=50.0, 
+                                  max_value=500.0, 
+                                  value=120.0, 
+                                  step=5.0)
+        acceleration = st.number_input("Acceleration (0-100 km/h)", 
+                                     min_value=2.0, 
+                                     max_value=20.0, 
+                                     value=10.0, 
+                                     step=0.1)
+        body_type = st.selectbox("Select Body Type:", 
+                              options=sorted(cr['Body Type'].unique()))
+
     if st.button("💰 Predict Price"):
         try:
-            # Encode categorical variables
-            city_encoded = cr['city'].astype('category').cat.categories.get_loc(city)
-            oem_encoded = cr['oem'].astype('category').cat.categories.get_loc(oem)
-            model_name_encoded = cr['model'].astype('category').cat.categories.get_loc(model_name)
-            year_encoded = year  # Assuming year is already a numerical value
-            fuel_type_encoded = cr['Fuel Type'].astype('category').cat.categories.get_loc(fuel_type)
-            ownership_encoded = cr['Ownership'].astype('category').cat.categories.get_loc(ownership)
-            transmission_encoded = cr['Transmission'].astype('category').cat.categories.get_loc(transmission)
-            engine_type_encoded = cr['Engine Type'].astype('category').cat.categories.get_loc(engine_type)
-            body_type_encoded = cr['Body Type'].astype('category').cat.categories.get_loc(body_type)
-
-            # Prepare input data
-            input_data = np.array([[city_encoded, oem_encoded, model_name_encoded, year_encoded, 
-                                    fuel_type_encoded, ownership_encoded, transmission_encoded, 
-                                    engine_type_encoded, Mileage, max_power, kms_driven, 
-                                    Acceleration, body_type_encoded]])  # Ensure all features are included
-
-            # Check the shape of input data
-            #st.write("Input data shape:", input_data.shape)  # Should output (1, 23)
-
-            # Debugging: Print encoded values
-            #st.write("Encoded values:", input_data)
-
-            # Predict price
-            predicted_price = car_model.predict(input_data)[0]
-            st.success(f"Predicted Price: ₹{predicted_price:,.2f}")
+            # Create input dictionary
+            input_data = {
+                'city': city,
+                'oem': oem,
+                'model': model_name,
+                'modelYear': int(year),
+                'Fuel Type': fuel_type,
+                'Ownership': ownership,
+                'Transmission': transmission,
+                'Engine Type': engine_type,
+                'Mileage': float(mileage),
+                'Max Power': float(max_power),
+                'Kms_Driven': int(kms_driven),
+                'Acceleration': float(acceleration),
+                'Body Type': body_type
+            }
+            
+            # Convert to DataFrame
+            input_df = pd.DataFrame([input_data])
+            
+            # Ensure all expected features are present
+            for feature in expected_features:
+                if feature not in input_df.columns:
+                    input_df[feature] = 0  # Add missing features with default value
+            
+            # Reorder columns to match model's expectations
+            input_df = input_df[expected_features]
+            
+            # Debug information
+            with st.expander("Debug Information"):
+                st.write("Input DataFrame Columns:", input_df.columns.tolist())
+                st.write("Model Expected Features:", expected_features)
+                st.write("Input Data Sample:", input_df.head())
+            
+            # Make prediction
+            predicted_price = car_model.predict(input_df)[0]
+            
+            # Display result
+            st.success(f"""
+            ### Predicted Price: ₹{predicted_price:,.2f}
+            
+            *{year} {oem} {model_name} with {kms_driven:,} km*
+            """)
+            
         except Exception as e:
-            st.error("An error occurred while predicting the price. Please check your inputs and try again.")
-            st.write(f"Error details: {str(e)}")
+            st.error(f"""
+            🚨 Prediction Failed: {str(e)}
+            
+            Common issues to check:
+            1. All fields are filled correctly
+            2. Categorical values match exactly (case-sensitive)
+            3. No special characters in text fields
+            4. Numeric values are within reasonable ranges
+            """)
+            
+            # Show sample valid values
+            with st.expander("Sample Valid Values"):
+                st.write("Cities:", cr['city'].unique()[:5])
+                st.write("Fuel Types:", cr['Fuel Type'].unique()[:5])
+                st.write("Engine Types:", cr['Engine Type'].unique()[:5])
+                st.write("Body Types:", cr['Body Type'].unique()[:5])
 
-
-# ✅ Car Details Page
-elif page == "ℹ️ Car Details":
-    st.header("ℹ️ Car Details")
-    car_search = st.text_input("Search for a Car Model")
-    if st.button("🔍 Search"):
-        filtered_data = cr[cr['model'].str.contains(car_search, case=False, na=False)]
-        st.write(filtered_data.head() if not filtered_data.empty
-                  else "No matching cars found.")
+elif page == "Data Explorer":
+    st.header("🔍 Car Data Explorer")
+    st.write("Explore the dataset used for predictions")
+    
+    # Show filtered data
+    st.subheader("Filter Data")
+    col1, col2 = st.columns(2)
+    selected_oem = col1.selectbox("Filter by Manufacturer", options=["All"] + sorted(cr['oem'].unique().tolist()))
+    selected_city = col2.selectbox("Filter by City", options=["All"] + sorted(cr['city'].unique().tolist()))
+    
+    filtered_data = cr.copy()
+    if selected_oem != "All":
+        filtered_data = filtered_data[filtered_data['oem'] == selected_oem]
+    if selected_city != "All":
+        filtered_data = filtered_data[filtered_data['city'] == selected_city]
+    
+    st.dataframe(filtered_data, height=400)
+    
+    # Show statistics
+    st.subheader("Price Statistics")
+    st.write(f"Average Price: ₹{filtered_data['price'].mean():,.2f}")
+    st.write(f"Minimum Price: ₹{filtered_data['price'].min():,.2f}")
+    st.write(f"Maximum Price: ₹{filtered_data['price'].max():,.2f}")
