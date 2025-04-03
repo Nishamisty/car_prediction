@@ -81,7 +81,7 @@ st.title("🚗 Car Price Prediction Dashboard")
 
 # ✅ Sidebar Navigation
 st.sidebar.title("🔍 Navigation")
-page = st.sidebar.radio("Go to", ["🏠 Home", "📊 Predict Price", "Data Explorer"])
+page = st.sidebar.radio("Go to", ["🏠 Home", "📊 Predict Price", "🔍 Data Explorer"])
 
 # 🚗 HOME PAGE
 if page == "🏠 Home":
@@ -229,7 +229,7 @@ elif page == "📊 Predict Price":
                 st.write("Engine Types:", cr['Engine Type'].unique()[:5])
                 st.write("Body Types:", cr['Body Type'].unique()[:5])
 
-elif page == "Data Explorer":
+elif page == "🔍 Data Explorer":
     st.header("🔍 Car Data Explorer")
     st.write("Explore the dataset used for predictions")
     
